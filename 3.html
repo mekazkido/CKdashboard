@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Win95 Minesweeper</title>
+<style>
+  /* Container */
+  .win95 {
+    width: 220px; /* small widget footprint */
+    background: #c0c0c0;
+    border: 2px solid #808080;
+    box-shadow: inset -2px -2px #ffffff, inset 2px 2px #404040;
+    font-family: "MS Sans Serif", Tahoma, sans-serif;
+    user-select: none;
+  }
+  .titlebar {
+    background: #000080;
+    color: #fff;
+    padding: 2px 6px;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .titlebar .title {
+    font-weight: 700;
+  }
+  .titlebar .controls {
+    display: flex;
+    gap: 2px;
+  }
+  .win95-btn {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #000;
+    background: #c0c0c0;
+    box-shadow: inset -1px -1px #fff, inset 1px 1px #404040;
+    display: inline-block;
+    line-height: 14px;
+    text-align: center;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .frame {
+    margin: 6px;
+    border: 2px solid #808080;
+    box-shadow: inset -2px -2px #fff, inset 2px 2px #404040;
+    background: #bdbdbd;
+    padding: 6px;
+  }
+
+  /* Top panel: counters and face */
+  .panel {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .segment {
+    background: #000;
+    color: #f00;
+    font-family: "Digital-7 Mono", "Courier New", monospace;
+    font-size: 16px;
+    letter-spacing: 2px;
+    text-align: right;
+    padding: 2px 4px;
+    width: 48px;
+    height: 20px;
+    border: 2px solid #808080;
+    box-shadow: inset -2px -2px #404040, inset 2px 2px #fff;
+  }
+  .face-btn {
+    width: 26px;
+    height: 26px;
+    border: 2px solid #808080;
+    box-shadow: inset -2px -2px #fff, inset 2px 2px #404040;
+    background: #c0c0c0;
+    cursor: pointer;
+    font-size: 16px;
+    display: grid;
+    place-items: center;
+  }
+  .face-smile::before { content: "☺"; }
+  .face-wow::before { content: "😮"; }
+  .face-dead::before { content: "☹"; }
+  .face-cool::before { content: "😎"; }
+
+  /* Board */
+  .board {
+    --cell: 20px; /* cell size for compact display */
+    display: grid;
+    grid-template-columns: repeat(9, var(--cell));
+    gap: 2px;
+    background: #bdbdbd;
+    padding: 2px;
+    border: 2px solid #808080;
+    box-shadow: inset -2px -2px #fff, inset 2px 2px #404040;
+    touch-action: manipulation;
+  }
+  .cell {
+    width: var(--cell);
+    height: var(--cell);
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+    border: 2px solid #808080;
+    box-shadow: inset -2px -2px #fff, inset 2px 2px #404040;
+    background: #c0c0c0;
+  }
+  .cell.revealed {
+    cursor: default;
+    border: 1px solid #7b7b7b;
+    box-shadow: none;
+    background: #e5e5e5;
+  }
+  .cell.flag::after {
+    content: "🚩";
+    font-size: 12px;
+    line-height: 1;
+  }
+  .cell.mine.revealed::after {
+    content: "💣";
+    font-size: 12px;
+    line-height: 1;
+  }
+  /* number colors (classic-ish) */
+  .n1 { color: #0000ff; }
+  .n2 { color: #008000; }
+  .n3 { color: #ff0000; }
+  .n4 { color: #000080; }
+  .n5 { color: #800000; }
+  .n6 { color: #008080; }
+  .n7 { color: #000000; }
+  .n8 { color: #808080; }
+
+  /* Footer mini controls (optional) */
+  .footer {
+    margin-top: 6px;
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    align-items: center;
+  }
+  .mini-btn {
+    padding: 2px 6px;
+    font-size: 11px;
+    border: 2px solid #808080;
+    background: #c0c0c0;
+    box-shadow: inset -2px -2px #fff, inset 2px 2px #404040;
+    cursor: pointer;
+  }
+  .mini-select {
+    height: 22px;
+    font-size: 11px;
+    border: 2px solid #808080;
+    background: #c0c0c0;
+    box-shadow: inset -2px -2px #fff, inset 2px 2px #404040;
+  }
+</style>
+</head>
+<body>
+  <div class="win95" id="minesweeper">
+    <div class="titlebar">
+      <span class="title">Minesweeper</span>
+      <div class="controls">
+        <span class="win95-btn" title="Minimize">_</span>
+        <span class="win95-btn" title="Maximize">□</span>
+        <span class="win95-btn" title="Close" onclick="msw.reset()">×</span>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="panel">
+        <div class="segment" id="mineCounter">010</div>
+        <div class="face-btn face-smile" id="face"></div>
+        <div class="segment" id="timer">000</div>
+      </div>
+      <div class="board" id="board" aria-label="Minesweeper board"></div>
+      <div class="footer">
+        <select id="preset" class="mini-select" title="Preset">
+          <option value="9x9x10">9×9 ×10</option>
+          <option value="9x9x15">9×9 ×15</option>
+          <option value="12x10x20">12×10 ×20</option>
+        </select>
+        <button class="mini-btn" onclick="msw.reset()">New</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // Tiny Win95 Minesweeper
+  const msw = (() => {
+    const boardEl = document.getElementById('board');
+    const faceEl = document.getElementById('face');
+    const mineCounterEl = document.getElementById('mineCounter');
+    const timerEl = document.getElementById('timer');
+    const presetEl = document.getElementById('preset');
+
+    let rows = 9, cols = 9, mines = 10;
+    let cells = []; // flat
+    let grid = [];  // 2D
+    let started = false;
+    let alive = true;
+    let flagsLeft = mines;
+    let timerId = null;
+    let seconds = 0;
+
+    function pad3(n) {
+      n = Math.max(0, Math.min(999, n|0));
+      return String(n).padStart(3, '0');
+    }
+
+    function startTimer() {
+      if (timerId) return;
+      timerId = setInterval(() => {
+        seconds++;
+        timerEl.textContent = pad3(seconds);
+      }, 1000);
+    }
+
+    function stopTimer() {
+      if (timerId) clearInterval(timerId);
+      timerId = null;
+    }
+
+    function neighbors(r, c) {
+      const list = [];
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (!dr && !dc) continue;
+          const nr = r + dr, nc = c + dc;
+          if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) list.push([nr, nc]);
+        }
+      }
+      return list;
+    }
+
+    function plantMines(safeR, safeC) {
+      let placed = 0;
+      const ban = new Set([safeR + ',' + safeC]); // first click safe
+      // also keep immediate neighbors safe like classic variants
+      neighbors(safeR, safeC).forEach(([r,c]) => ban.add(r + ',' + c));
+      while (placed < mines) {
+        const r = (Math.random() * rows) | 0;
+        const c = (Math.random() * cols) | 0;
+        const key = r + ',' + c;
+        if (ban.has(key) || grid[r][c].mine) continue;
+        grid[r][c].mine = true;
+        placed++;
+      }
+      // compute counts
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          if (grid[r][c].mine) continue;
+          grid[r][c].count = neighbors(r,c).reduce((acc, [nr,nc]) => acc + (grid[nr][nc].mine?1:0), 0);
+        }
+      }
+    }
+
+    function reveal(r, c) {
+      const cell = grid[r][c];
+      if (cell.revealed || cell.flag || !alive) return;
+      cell.revealed = true;
+      const el = cell.el;
+      el.classList.add('revealed');
+      el.classList.remove('flag');
+      el.textContent = '';
+      el.className = 'cell revealed';
+
+      if (cell.mine) {
+        el.classList.add('mine');
+        gameOver(false);
+        return;
+      }
+      if (cell.count > 0) {
+        el.textContent = cell.count;
+        el.classList.add('n' + cell.count);
+      } else {
+        // flood
+        neighbors(r,c).forEach(([nr,nc]) => reveal(nr,nc));
+      }
+      checkWin();
+    }
+
+    function toggleFlag(r, c) {
+      const cell = grid[r][c];
+      if (cell.revealed || !alive) return;
+      cell.flag = !cell.flag;
+      if (cell.flag) flagsLeft--; else flagsLeft++;
+      cell.el.classList.toggle('flag', cell.flag);
+      mineCounterEl.textContent = pad3(flagsLeft);
+    }
+
+    function gameOver(won) {
+      alive = false;
+      stopTimer();
+      faceEl.className = 'face-btn ' + (won ? 'face-cool' : 'face-dead');
+      if (!won) {
+        // show all mines
+        grid.flat().forEach(c => {
+          if (c.mine) {
+            c.el.classList.add('revealed', 'mine');
+          }
+        });
+      }
+    }
+
+    function checkWin() {
+      const allClear = grid.flat().every(c => (c.mine && !c.revealed) || (!c.mine && c.revealed));
+      if (allClear) gameOver(true);
+    }
+
+    function handleDown(e, r, c) {
+      if (!alive) return;
+      if (!started) {
+        // create mines away from first click
+        plantMines(r, c);
+        started = true;
+        seconds = 0;
+        timerEl.textContent = '000';
+        startTimer();
+      }
+      faceEl.className = 'face-btn face-wow';
+      if (e.button === 0) {
+        reveal(r, c);
+      }
+    }
+
+    function handleUp() {
+      if (!alive) return;
+      faceEl.className = 'face-btn face-smile';
+    }
+
+    function createBoard() {
+      boardEl.innerHTML = '';
+      boardEl.style.gridTemplateColumns = `repeat(${cols}, var(--cell))`;
+
+      grid = Array.from({length: rows}, () => Array.from({length: cols}, () => ({
+        mine: false, revealed: false, flag: false, count: 0, el: null
+      })));
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const div = document.createElement('div');
+          div.className = 'cell';
+          div.oncontextmenu = (ev) => { ev.preventDefault(); toggleFlag(r,c); };
+          div.onmousedown = (ev) => handleDown(ev, r, c);
+          div.onmouseup = handleUp;
+          div.onmouseleave = handleUp;
+          // Touch support
+          div.addEventListener('touchstart', (ev) => {
+            ev.preventDefault();
+            handleDown({button:0}, r, c);
+          }, {passive:false});
+          div.addEventListener('touchend', (ev) => {
+            ev.preventDefault();
+            handleUp();
+          });
+
+          grid[r][c].el = div;
+          boardEl.appendChild(div);
+        }
+      }
+    }
+
+    function resetFromPreset() {
+      const val = presetEl.value; // e.g., "9x9x10"
+      const [w,h,m] = val.split('x').map(Number);
+      cols = w; rows = h; mines = m;
+      flagsLeft = mines;
+      mineCounterEl.textContent = pad3(flagsLeft);
+      faceEl.className = 'face-btn face-smile';
+      started = false; alive = true;
+      stopTimer(); seconds = 0; timerEl.textContent = '000';
+      createBoard();
+    }
+
+    function reset() {
+      flagsLeft = mines;
+      mineCounterEl.textContent = pad3(flagsLeft);
+      faceEl.className = 'face-btn face-smile';
+      started = false; alive = true;
+      stopTimer(); seconds = 0; timerEl.textContent = '000';
+      createBoard();
+    }
+
+    presetEl.addEventListener('change', resetFromPreset);
+    // Public API
+    return { reset, resetFromPreset };
+  })();
+
+  // init
+  msw.resetFromPreset();
+</script>
+</body>
+</html>

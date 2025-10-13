@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mini Paint Widget</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: "MS Sans Serif", sans-serif;
+      background: #c0c0c0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .paint-widget {
+      width: 340px;
+      border: 2px solid #808080;
+      background: #c0c0c0;
+      box-shadow: inset -2px -2px #fff, inset 2px 2px #404040;
+    }
+    .title-bar {
+      background: #000080;
+      color: white;
+      padding: 2px 4px;
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px;
+      padding: 4px;
+      background: #d4d0c8;
+      border-bottom: 2px solid #808080;
+    }
+    .tool-btn, .color-btn, .clear-btn {
+      width: 24px;
+      height: 24px;
+      background: #c0c0c0;
+      border: 2px solid #808080;
+      box-shadow: inset -2px -2px #fff, inset 2px 2px #404040;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 12px;
+    }
+    .color-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px;
+      padding: 4px;
+      background: #d4d0c8;
+      border-top: 2px solid #fff;
+      border-bottom: 2px solid #808080;
+    }
+    canvas {
+      display: block;
+      background: white;
+      border: 2px solid #808080;
+      margin: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="paint-widget">
+    <div class="title-bar">
+      <span>Paint</span>
+      <span>_ □ X</span>
+    </div>
+    <div class="toolbar">
+      <div class="tool-btn" onclick="selectTool('brush')">🖊</div>
+      <div class="tool-btn" onclick="selectTool('eraser')">⌫</div>
+      <div class="tool-btn" onclick="selectTool('line')">/</div>
+      <div class="tool-btn" onclick="selectTool('rect')">▭</div>
+      <div class="tool-btn" onclick="selectTool('circle')">◯</div>
+      <div class="tool-btn" onclick="setBrushSize(2)">•</div>
+      <div class="tool-btn" onclick="setBrushSize(5)">●</div>
+      <div class="tool-btn" onclick="setBrushSize(10)">⬤</div>
+      <div class="clear-btn" onclick="clearCanvas()">✖</div>
+    </div>
+    <div class="color-bar">
+      <div class="color-btn" style="background:black" onclick="setColor('black')"></div>
+      <div class="color-btn" style="background:red" onclick="setColor('red')"></div>
+      <div class="color-btn" style="background:blue" onclick="setColor('blue')"></div>
+      <div class="color-btn" style="background:green" onclick="setColor('green')"></div>
+      <div class="color-btn" style="background:yellow" onclick="setColor('yellow')"></div>
+      <div class="color-btn" style="background:orange" onclick="setColor('orange')"></div>
+      <div class="color-btn" style="background:purple" onclick="setColor('purple')"></div>
+      <div class="color-btn" style="background:white; border:1px solid #000;" onclick="setColor('white')"></div>
+    </div>
+    <canvas id="paintCanvas" width="320" height="200"></canvas>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('paintCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let drawing = false;
+    let tool = 'brush';
+    let startX, startY;
+    let brushSize = 2;
+    let currentColor = 'black';
+
+    function selectTool(t) {
+      tool = t;
+    }
+
+    function setBrushSize(size) {
+      brushSize = size;
+    }
+
+    function setColor(color) {
+      currentColor = color;
+    }
+
+    function clearCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+      drawing = true;
+      startX = e.offsetX;
+      startY = e.offsetY;
+      if (tool === 'brush' || tool === 'eraser') {
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+      }
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!drawing) return;
+      const x = e.offsetX;
+      const y = e.offsetY;
+      if (tool === 'brush') {
+        ctx.strokeStyle = currentColor;
+        ctx.lineWidth = brushSize;
+        ctx.lineTo(x, y);
+        ctx.stroke();
+      } else if (tool === 'eraser') {
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = brushSize * 3;
+        ctx.lineTo(x, y);
+        ctx.stroke();
+      }
+    });
+
+    canvas.addEventListener('mouseup', (e) => {
+      drawing = false;
+      const x = e.offsetX;
+      const y = e.offsetY;
+      if (tool === 'line') {
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(x, y);
+        ctx.strokeStyle = currentColor;
+        ctx.lineWidth = brushSize;
+        ctx.stroke();
+      } else if (tool === 'rect') {
+        ctx.strokeStyle = currentColor;
+        ctx.lineWidth = brushSize;
+        ctx.strokeRect(startX, startY, x - startX, y - startY);
+      } else if (tool === 'circle') {
+        ctx.beginPath();
+        const radius = Math.sqrt((x - startX) ** 2 + (y - startY) ** 2);
+        ctx.arc(startX, startY, radius, 0, Math.PI * 2);
+        ctx.strokeStyle = currentColor;
+        ctx.lineWidth = brushSize;
+        ctx.stroke();
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Win95 Solitaire Widget — Playable</title>
+<style>
+  body {margin:0;background:#008080;font-family:"MS Sans Serif",sans-serif;display:flex;justify-content:center;align-items:center;height:100vh}
+  .solitaire{width:360px;border:2px solid #808080;background:#c0c0c0;box-shadow:inset -2px -2px #fff,inset 2px 2px #404040}
+  .title-bar{background:#000080;color:#fff;padding:2px 6px;font-size:12px;display:flex;justify-content:space-between}
+  .toolbar{padding:4px;background:#d4d0c8;display:flex;gap:6px}
+  .tool-btn{font-size:12px;background:#c0c0c0;border:2px solid #808080;box-shadow:inset -2px -2px #fff,inset 2px 2px #404040;padding:2px 6px;cursor:pointer}
+  canvas{background:linear-gradient(#007a07,#005500);display:block;margin:4px auto;border:2px solid #808080}
+  .status{padding:6px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="solitaire">
+  <div class="title-bar"><span>Solitaire</span><span>_ □ X</span></div>
+  <div class="toolbar">
+    <div class="tool-btn" onclick="newGame()">New</div>
+    <div class="tool-btn" onclick="undoMove()">Undo</div>
+    <div class="tool-btn" onclick="toggleDraw()">Draw: <span id="drawModeLabel">1</span></div>
+    <div style="flex:1"></div>
+    <div class="tool-btn" id="moves">Moves: 0</div>
+  </div>
+  <canvas id="solCanvas" width="340" height="520"></canvas>
+  <div class="status" id="status">Tip: drag cards to move. Double-click a card to auto-move to foundation.</div>
+</div>
+<script>
+// Full playable Klondike Solitaire for small widget with dragging and rules
+const canvas = document.getElementById('solCanvas');
+const ctx = canvas.getContext('2d');
+const CARD_W = 44, CARD_H = 64; // slightly larger symbols
+const PADDING_LEFT = 10, PADDING_TOP = 10;
+const GAP_X = 48, GAP_Y = 18;
+const suits = ['hearts','diamonds','clubs','spades'];
+const suitSymbols = {hearts:'♥',diamonds:'♦',clubs:'♣',spades:'♠'};
+const values = [null,'A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+
+let deck = [];
+let piles = [[],[],[],[],[],[],[]];
+let stock = [];
+let waste = [];
+let foundations = [[],[],[],[]];
+let drawCount = 1;
+let moves = 0;
+let history = [];
+
+// dragging state
+let dragging = null; // {cards:[],from:{type:'pile'|'waste',index,cardIndex},x,y,offsetX,offsetY}
+
+function createDeck(){
+  const d=[];
+  for(const s of suits){
+    for(let r=1;r<=13;r++) d.push({suit:s,rank:r,faceUp:false,color:(s==='hearts'||s==='diamonds')?'red':'black'});
+  }
+  return d;
+}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}}
+
+function newGame(){
+  deck=createDeck(); shuffle(deck);
+  piles=[[],[],[],[],[],[],[]]; stock=[]; waste=[]; foundations=[[],[],[],[]]; moves=0; history=[];
+  // deal
+  for(let c=0;c<7;c++){
+    for(let r=0;r<=c;r++){ const card = deck.pop(); card.faceUp = (r===c); piles[c].push(card); }
+  }
+  while(deck.length) stock.push(deck.pop());
+  saveHistory(); draw(); updateMoves(); document.getElementById('status').textContent='Good luck!';
+}
+
+function saveHistory(){ // deep-ish clone minimal
+  const snap = {p: JSON.parse(JSON.stringify(piles)), s: JSON.parse(JSON.stringify(stock)), w: JSON.parse(JSON.stringify(waste)), f: JSON.parse(JSON.stringify(foundations)), m: moves};
+  history.push(snap); if(history.length>100) history.shift(); }
+function undoMove(){ if(history.length<2) return; history.pop(); const s = history[history.length-1]; piles = JSON.parse(JSON.stringify(s.p)); stock = JSON.parse(JSON.stringify(s.s)); waste = JSON.parse(JSON.stringify(s.w)); foundations = JSON.parse(JSON.stringify(s.f)); moves = s.m; draw(); updateMoves(); }
+
+function updateMoves(){ document.getElementById('moves').textContent = 'Moves: '+moves }
+
+function toggleDraw(){ drawCount = (drawCount===1)?3:1; document.getElementById('drawModeLabel').textContent = drawCount; }
+
+// rendering
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // stock slot
+  drawSlot(PADDING_LEFT,PADDING_TOP, 'stock', stock.length>0);
+  // waste
+  drawSlot(PADDING_LEFT+GAP_X,PADDING_TOP, 'waste', waste.length>0);
+  if(waste.length) drawCard(waste[waste.length-1], PADDING_LEFT+GAP_X+2, PADDING_TOP+2);
+  // foundations
+  for(let i=0;i<4;i++){ const x = PADDING_LEFT + (i+2)*GAP_X; drawSlot(x,PADDING_TOP,'foundation', foundations[i].length>0); if(foundations[i].length) drawCard(foundations[i][foundations[i].length-1], x+2, PADDING_TOP+2); }
+  // tableau
+  for(let c=0;c<7;c++){ const col = piles[c]; for(let r=0;r<col.length;r++){ const card = col[r]; const x = PADDING_LEFT + c*GAP_X; const y = PADDING_TOP + CARD_H + 20 + r*GAP_Y; // first row offset
+      // if dragging and card is part of dragging from this pile and same index or deeper, skip drawing (will draw dragged stack)
+      if(dragging && dragging.from && dragging.from.type==='pile' && dragging.from.index===c && r>=dragging.from.cardIndex) continue;
+      drawCard(card,x+2,y+2);
+    }
+  }
+  // draw dragging stack on top
+  if(dragging){ for(let i=0;i<dragging.cards.length;i++){ const card = dragging.cards[i]; drawCard(card, dragging.x - dragging.offsetX, dragging.y - dragging.offsetY + i*GAP_Y); } }
+}
+
+function drawSlot(x,y,type,has){ ctx.strokeStyle='#000'; ctx.fillStyle='#fff'; ctx.fillRect(x,y,CARD_W,CARD_H); ctx.strokeRect(x,y,CARD_W,CARD_H); if(!has){ ctx.fillStyle='#eee'; ctx.font='10px MS Sans Serif'; ctx.fillText(type==='stock'?'Stock':(type==='waste'?'Waste':'Empty'), x+6, y+34); } }
+
+function drawCard(card,x,y){ ctx.fillStyle = card.faceUp ? '#fff' : '#00008b'; ctx.fillRect(x,y,CARD_W,CARD_H); ctx.strokeStyle='#111'; ctx.strokeRect(x,y,CARD_W,CARD_H);
+  if(card.faceUp){ ctx.fillStyle = card.color; ctx.font='bold 16px MS Sans Serif'; ctx.fillText(values[card.rank], x+4, y+18); ctx.fillText(suitSymbols[card.suit], x+6, y+40); }
+}
+
+// hit detection helpers
+function pointInRect(px,py,x,y,w,h){ return px>=x && px<=x+w && py>=y && py<=y+h }
+
+function coordForPileCard(colIndex, cardIndex){ const x = PADDING_LEFT + colIndex*GAP_X + 2; const y = PADDING_TOP + CARD_H + 20 + cardIndex*GAP_Y + 2; return {x,y} }
+
+// mouse interactions
+let mouseDown = false;
+canvas.addEventListener('mousedown',(e)=>{
+  const mx=e.offsetX, my=e.offsetY; mouseDown=true;
+  // check tableau cards from top to bottom
+  for(let c=0;c<7;c++){
+    const col = piles[c];
+    for(let r=col.length-1;r>=0;r--){ const pos = coordForPileCard(c,r); if(pointInRect(mx,my,pos.x,pos.y,CARD_W,CARD_H)){
+        const card = col[r]; if(!card.faceUp) return; // ignore hidden
+        // pick up stack starting at r
+        const moving = col.splice(r); dragging={cards:moving, from:{type:'pile',index:c,cardIndex:r}, x:mx, y:my, offsetX: mx - pos.x, offsetY: my - pos.y};
+        draw(); return;
+      } }
+  }
+  // check waste top
+  const wasteX = PADDING_LEFT+GAP_X+2, wasteY = PADDING_TOP+2;
+  if(waste.length && pointInRect(mx,my,wasteX,wasteY,CARD_W,CARD_H)){
+    // pick up the single waste card
+    const card = waste.pop(); dragging={cards:[card], from:{type:'waste'}, x:mx, y:my, offsetX: mx - wasteX, offsetY: my - wasteY}; draw(); return;
+  }
+  // check stock click (draw)
+  const stockX = PADDING_LEFT+2, stockY = PADDING_TOP+2;
+  if(pointInRect(mx,my,stockX,stockY,CARD_W,CARD_H)){
+    handleStockClick(); return;
+  }
+});
+
+canvas.addEventListener('mousemove',(e)=>{ if(dragging){ dragging.x = e.offsetX; dragging.y = e.offsetY; draw(); } });
+
+canvas.addEventListener('mouseup',(e)=>{ mouseDown=false; if(dragging){ const mx=e.offsetX, my=e.offsetY; // determine drop target: foundations or tableau
+    // try foundations
+    let placed=false;
+    for(let f=0;f<4;f++){ const fx = PADDING_LEFT + (f+2)*GAP_X +2, fy = PADDING_TOP+2; if(pointInRect(mx,my,fx,fy,CARD_W,CARD_H) && dragging.cards.length===1){ if(canPlaceOnFoundation(dragging.cards[0],f)){ foundations[f].push(dragging.cards[0]); placed=true; break; } } }
+    if(!placed){ // try tableau columns
+      for(let c=0;c<7;c++){ const tx = PADDING_LEFT + c*GAP_X +2, ty = PADDING_TOP + CARD_H + 20 - 4; // allow dropping to top area
+        if(pointInRect(mx,my,tx,ty,CARD_W+10,canvas.height-ty)){ if(canPlaceOnTableau(dragging.cards[0], piles[c])){ // place entire dragging.cards onto piles[c]
+            piles[c] = piles[c].concat(dragging.cards); placed=true; break; } }
+      }
+    }
+    if(!placed){ // invalid drop -> return to source
+      if(dragging.from.type==='pile'){ piles[dragging.from.index] = piles[dragging.from.index].concat(dragging.cards); }
+      else if(dragging.from.type==='waste'){ waste.push(dragging.cards[0]); }
+    } else { moves++; saveHistory(); flipTopIfNeeded(); updateMoves(); }
+    dragging = null; draw(); checkWin(); }
+});
+
+canvas.addEventListener('dblclick',(e)=>{ const mx=e.offsetX,my=e.offsetY; // check topmost face-up single cards in piles and waste
+  // tableau top cards
+  for(let c=0;c<7;c++){ const col=piles[c]; if(!col.length) continue; const card=col[col.length-1]; const pos=coordForPileCard(c,col.length-1); if(pointInRect(mx,my,pos.x,pos.y,CARD_W,CARD_H) && card.faceUp){ // try auto to foundation
+      for(let f=0;f<4;f++){ if(canPlaceOnFoundation(card,f)){ col.pop(); foundations[f].push(card); moves++; saveHistory(); flipTopIfNeeded(); draw(); updateMoves(); checkWin(); return; } } } }
+  // waste
+  const wasteX = PADDING_LEFT+GAP_X+2, wasteY = PADDING_TOP+2;
+  if(waste.length && pointInRect(mx,my,wasteX,wasteY,CARD_W,CARD_H)){ const card = waste[waste.length-1]; for(let f=0;f<4;f++){ if(canPlaceOnFoundation(card,f)){ waste.pop(); foundations[f].push(card); moves++; saveHistory(); flipTopIfNeeded(); draw(); updateMoves(); checkWin(); return;} } }
+});
+
+function handleStockClick(){ if(stock.length===0){ // recycle waste to stock
+    while(waste.length){ const c = waste.pop(); c.faceUp=false; stock.push(c); }
+    moves++; saveHistory(); draw(); return; }
+  // draw drawCount cards
+  let drawN = Math.min(drawCount, stock.length);
+  for(let i=0;i<drawN;i++){ const c = stock.pop(); c.faceUp=true; waste.push(c); }
+  moves++; saveHistory(); draw(); updateMoves(); }
+
+function flipTopIfNeeded(){ // if top of any pile faceDown and now top, flip it
+  for(let c=0;c<7;c++){ const col=piles[c]; if(col.length && !col[col.length-1].faceUp){ col[col.length-1].faceUp=true; } }
+}
+
+function canPlaceOnFoundation(card, fIndex){ const pile = foundations[fIndex]; if(!pile.length) return card.rank===1; const top = pile[pile.length-1]; return (card.suit===top.suit) && (card.rank === top.rank + 1); }
+
+function canPlaceOnTableau(card, destCol){ if(destCol.length===0) return card.rank===13; const top = destCol[destCol.length-1]; const topColor = (top.suit==='hearts'||top.suit==='diamonds')?'red':'black'; const cardColor = (card.suit==='hearts'||card.suit==='diamonds')?'red':'black'; return (top.rank === card.rank + 1) && (topColor !== cardColor); }
+
+function checkWin(){ const total = foundations.reduce((s,p)=>s+p.length,0); if(total===52){ document.getElementById('status').textContent='You win! Press New to play again.'; } }
+
+function undoMove(){ if(history.length<2) return; history.pop(); const s = history[history.length-1]; piles = JSON.parse(JSON.stringify(s.p)); stock = JSON.parse(JSON.stringify(s.s)); waste = JSON.parse(JSON.stringify(s.w)); foundations = JSON.parse(JSON.stringify(s.f)); moves = s.m; draw(); updateMoves(); }
+
+function toggleDraw(){ drawCount = (drawCount===1)?3:1; document.getElementById('drawModeLabel').textContent = drawCount; }
+
+// export functions to toolbar
+window.newGame = newGame; window.undoMove = undoMove; window.toggleDraw = toggleDraw;
+
+// initial
+newGame();
+</script>
+</body>
+</html>
