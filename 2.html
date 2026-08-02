@@ -112,8 +112,17 @@ function coordForPileCard(colIndex, cardIndex){ const x = PADDING_LEFT + colInde
 
 // mouse interactions
 let mouseDown = false;
-canvas.addEventListener('mousedown',(e)=>{
-  const mx=e.offsetX, my=e.offsetY; mouseDown=true;
+
+// Position relative to the canvas, computed from clientX/Y so it's still
+// correct when the event fires on window (outside the canvas bounds).
+function getCanvasPos(e){
+  const rect = canvas.getBoundingClientRect();
+  const src = e.touches && e.touches.length ? e.touches[0] : (e.changedTouches && e.changedTouches.length ? e.changedTouches[0] : e);
+  return { x: src.clientX - rect.left, y: src.clientY - rect.top };
+}
+
+function handlePickup(e){
+  const {x: mx, y: my} = getCanvasPos(e); mouseDown=true;
   // check tableau cards from top to bottom
   for(let c=0;c<7;c++){
     const col = piles[c];
@@ -135,11 +144,11 @@ canvas.addEventListener('mousedown',(e)=>{
   if(pointInRect(mx,my,stockX,stockY,CARD_W,CARD_H)){
     handleStockClick(); return;
   }
-});
+}
 
-canvas.addEventListener('mousemove',(e)=>{ if(dragging){ dragging.x = e.offsetX; dragging.y = e.offsetY; draw(); } });
+function handleDragMove(e){ if(dragging){ const p = getCanvasPos(e); dragging.x = p.x; dragging.y = p.y; draw(); } }
 
-canvas.addEventListener('mouseup',(e)=>{ mouseDown=false; if(dragging){ const mx=e.offsetX, my=e.offsetY; // determine drop target: foundations or tableau
+function handleDrop(e){ mouseDown=false; if(dragging){ const {x: mx, y: my} = getCanvasPos(e); // determine drop target: foundations or tableau
     // try foundations
     let placed=false;
     for(let f=0;f<4;f++){ const fx = PADDING_LEFT + (f+2)*GAP_X +2, fy = PADDING_TOP+2; if(pointInRect(mx,my,fx,fy,CARD_W,CARD_H) && dragging.cards.length===1){ if(canPlaceOnFoundation(dragging.cards[0],f)){ foundations[f].push(dragging.cards[0]); placed=true; break; } } }
@@ -154,7 +163,18 @@ canvas.addEventListener('mouseup',(e)=>{ mouseDown=false; if(dragging){ const mx
       else if(dragging.from.type==='waste'){ waste.push(dragging.cards[0]); }
     } else { moves++; saveHistory(); flipTopIfNeeded(); updateMoves(); }
     dragging = null; draw(); checkWin(); }
-});
+}
+
+canvas.addEventListener('mousedown', handlePickup);
+// mousemove/mouseup listen on window (not just the canvas) so releasing the
+// button outside the canvas still drops the card instead of leaving it
+// stuck to the cursor until another click happens to land on the canvas.
+window.addEventListener('mousemove', handleDragMove);
+window.addEventListener('mouseup', handleDrop);
+
+canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); handlePickup(e); }, {passive:false});
+window.addEventListener('touchmove', (e)=>{ if(dragging) e.preventDefault(); handleDragMove(e); }, {passive:false});
+window.addEventListener('touchend', handleDrop);
 
 canvas.addEventListener('dblclick',(e)=>{ const mx=e.offsetX,my=e.offsetY; // check topmost face-up single cards in piles and waste
   // tableau top cards
@@ -182,10 +202,6 @@ function canPlaceOnFoundation(card, fIndex){ const pile = foundations[fIndex]; i
 function canPlaceOnTableau(card, destCol){ if(destCol.length===0) return card.rank===13; const top = destCol[destCol.length-1]; const topColor = (top.suit==='hearts'||top.suit==='diamonds')?'red':'black'; const cardColor = (card.suit==='hearts'||card.suit==='diamonds')?'red':'black'; return (top.rank === card.rank + 1) && (topColor !== cardColor); }
 
 function checkWin(){ const total = foundations.reduce((s,p)=>s+p.length,0); if(total===52){ document.getElementById('status').textContent='You win! Press New to play again.'; } }
-
-function undoMove(){ if(history.length<2) return; history.pop(); const s = history[history.length-1]; piles = JSON.parse(JSON.stringify(s.p)); stock = JSON.parse(JSON.stringify(s.s)); waste = JSON.parse(JSON.stringify(s.w)); foundations = JSON.parse(JSON.stringify(s.f)); moves = s.m; draw(); updateMoves(); }
-
-function toggleDraw(){ drawCount = (drawCount===1)?3:1; document.getElementById('drawModeLabel').textContent = drawCount; }
 
 // export functions to toolbar
 window.newGame = newGame; window.undoMove = undoMove; window.toggleDraw = toggleDraw;

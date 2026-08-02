@@ -123,20 +123,28 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
 
-    canvas.addEventListener('mousedown', (e) => {
+    // Position relative to the canvas, computed from clientX/Y so it stays
+    // correct even when the event fires on window (outside the canvas).
+    function getPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      const src = e.touches && e.touches.length ? e.touches[0] : (e.changedTouches && e.changedTouches.length ? e.changedTouches[0] : e);
+      return { x: src.clientX - rect.left, y: src.clientY - rect.top };
+    }
+
+    function handleStart(e) {
+      const pos = getPos(e);
       drawing = true;
-      startX = e.offsetX;
-      startY = e.offsetY;
+      startX = pos.x;
+      startY = pos.y;
       if (tool === 'brush' || tool === 'eraser') {
         ctx.beginPath();
         ctx.moveTo(startX, startY);
       }
-    });
+    }
 
-    canvas.addEventListener('mousemove', (e) => {
+    function handleMove(e) {
       if (!drawing) return;
-      const x = e.offsetX;
-      const y = e.offsetY;
+      const { x, y } = getPos(e);
       if (tool === 'brush') {
         ctx.strokeStyle = currentColor;
         ctx.lineWidth = brushSize;
@@ -148,12 +156,14 @@
         ctx.lineTo(x, y);
         ctx.stroke();
       }
-    });
+    }
 
-    canvas.addEventListener('mouseup', (e) => {
+    function handleEnd(e) {
+      // Guards against firing on unrelated clicks now that this listens on
+      // window — only act if a stroke was actually started on the canvas.
+      if (!drawing) return;
       drawing = false;
-      const x = e.offsetX;
-      const y = e.offsetY;
+      const { x, y } = getPos(e);
       if (tool === 'line') {
         ctx.beginPath();
         ctx.moveTo(startX, startY);
@@ -173,7 +183,18 @@
         ctx.lineWidth = brushSize;
         ctx.stroke();
       }
-    });
+    }
+
+    canvas.addEventListener('mousedown', handleStart);
+    // mousemove/mouseup listen on window (not just the canvas) so that
+    // releasing the mouse button outside the canvas still ends the stroke
+    // instead of leaving the tool permanently "stuck" drawing.
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleEnd);
+
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleStart(e); }, { passive: false });
+    window.addEventListener('touchmove', (e) => { if (drawing) e.preventDefault(); handleMove(e); }, { passive: false });
+    window.addEventListener('touchend', handleEnd);
   </script>
 </body>
 </html>
